@@ -50,14 +50,12 @@ export type stateType = {
     isNewWarning: boolean;
     isSelectBook: boolean;
     selectedBooks: string[];
-    isTipDialog: boolean;
     settingMode: string;
     settingDrive: string;
     isDetailDialog: boolean;
     isOpenFeedbackDialog: boolean;
     bookSortCode: { sort: number; order: number };
     noteSortCode: { sort: number; order: number };
-    tip: string;
   };
   book: {
     isOpenEditDialog: boolean;
@@ -67,6 +65,8 @@ export type stateType = {
     isOpenActionDialog: boolean;
     isReading: boolean;
     dragItem: string;
+    currentPage: number;
+    totalPage: number;
     currentBook: BookModel;
     renderBookFunc: () => void;
     renderNoteFunc: () => void;
@@ -88,6 +88,8 @@ export type stateType = {
     digests: NoteModel[];
     color: number;
     chapters: any[];
+    readerMode: string;
+    isNavLocked: boolean;
     noteKey: string;
     currentChapter: string;
     currentChapterIndex: number;

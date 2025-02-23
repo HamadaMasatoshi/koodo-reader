@@ -22,6 +22,7 @@ export const onSyncCallback = async (service: string, authCode: string) => {
     toast.error(i18n.t("Authorization failed"), { id: "adding-sync-id" });
     return;
   }
+  // FOR PCLOUD, THE REFRESH TOKEN IS THE ACCESS TOKEN, ACCESS TOKEN NEVER EXPIRES
   let code = await encryptToken(service, {
     refresh_token: refreshToken,
   });
@@ -52,7 +53,7 @@ export const encryptToken = async (service: string, config: any) => {
     handleExitApp();
     return;
   } else {
-    toast.error(i18n.t("Encryption failed, error code: ") + response.code);
+    toast.error(i18n.t("Encryption failed, error code") + ": " + response.msg);
   }
   return response.code;
 };
@@ -75,7 +76,7 @@ export const decryptToken = async (service: string) => {
   } else if (response.code === 401) {
     handleExitApp();
   } else {
-    toast.error(i18n.t("Decryption failed, error code: ") + response.code);
+    toast.error(i18n.t("Decryption failed, error code") + ": " + response.msg);
   }
   return {};
 };

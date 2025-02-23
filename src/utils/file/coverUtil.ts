@@ -33,6 +33,10 @@ class CoverUtil {
     }
   }
   static isCoverExist(book: BookModel) {
+    if (!book) return false;
+    if (book.cover) {
+      return true;
+    }
     if (isElectron) {
       var fs = window.require("fs");
       var path = window.require("path");
@@ -78,6 +82,8 @@ class CoverUtil {
       );
       this.uploadCover(book.key + "." + this.base64ToFileType(book.cover));
       book.cover = "";
+    } else {
+      this.uploadCover(book.key + "." + this.base64ToFileType(book.cover));
     }
   }
   static convertCoverBase64(base64: string) {
@@ -162,17 +168,25 @@ class CoverUtil {
       }
       let tokenConfig = await getCloudConfig(service);
 
-      await ipcRenderer.invoke("cloud-download", {
+      let result = await ipcRenderer.invoke("cloud-download", {
         ...tokenConfig,
         fileName: cover,
         service: service,
         type: "cover",
         storagePath: getStorageLocation(),
       });
+      if (!result) {
+        console.log("download cover failed");
+        return;
+      }
     } else {
       let syncUtil = await SyncService.getSyncUtil();
 
       let imgBuffer: ArrayBuffer = await syncUtil.downloadFile(cover, "cover");
+      if (!imgBuffer) {
+        console.log("download cover failed");
+        return;
+      }
       let imgStr = CommonTool.arrayBufferToBase64(imgBuffer);
       if (!imgStr) {
         console.log("download cover failed");

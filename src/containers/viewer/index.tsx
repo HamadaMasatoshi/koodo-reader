@@ -16,6 +16,7 @@ import {
   handlePercentage,
   handleFetchPercentage,
   handleFetchPlugins,
+  handleReaderMode,
 } from "../../store/actions";
 import Viewer from "./component";
 import { stateType } from "../../store";
@@ -28,9 +29,11 @@ const mapStateToProps = (state: stateType) => {
     isReading: state.book.isReading,
     renderNoteFunc: state.book.renderNoteFunc,
     htmlBook: state.reader.htmlBook,
+    isNavLocked: state.reader.isNavLocked,
     isOpenMenu: state.viewArea.isOpenMenu,
     books: state.manager.books,
     notes: state.reader.notes,
+    readerMode: state.reader.readerMode,
     defaultSyncOption: state.backupPage.defaultSyncOption,
     menuMode: state.viewArea.menuMode,
   };
@@ -52,6 +55,7 @@ const actionCreator = {
   handlePercentage,
   handleMenuMode,
   handleFetchPlugins,
+  handleReaderMode,
 };
 export default connect(
   mapStateToProps,

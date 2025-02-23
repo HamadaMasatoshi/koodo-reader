@@ -5,7 +5,11 @@ export interface ReaderProps {
   percentage: number;
   t: (title: string) => string;
   htmlBook: HtmlBookModel;
+  isNavLocked: boolean;
+  isSearch: boolean;
+  readerMode: string;
   handleFetchNotes: () => void;
+  handleReaderMode: (readerMode: string) => void;
   handleFetchBooks: () => void;
   handleFetchBookmarks: () => void;
   handleFetchPercentage: (currentBook: BookModel) => void;
@@ -20,5 +24,7 @@ export interface ReaderState {
   isTouch: boolean;
   isPreventTrigger: boolean;
   hoverPanel: string;
+  scale: string;
+  isShowScale: boolean;
   time: number;
 }

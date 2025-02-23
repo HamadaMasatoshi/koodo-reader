@@ -6,7 +6,6 @@ const initState = {
   chapters: null,
   currentChapter: "",
   currentChapterIndex: 0,
-
   color: parseInt(ConfigService.getReaderConfig("highlightIndex"))
     ? parseInt(ConfigService.getReaderConfig("highlightIndex"))
     : ConfigService.getReaderConfig("appSkin") === "night" ||
@@ -17,7 +16,8 @@ const initState = {
   noteKey: "",
   originalText: "",
   htmlBook: null,
-  readerMode: ConfigService.getReaderConfig("readerMode") || "double",
+  readerMode: "double",
+  isNavLocked: ConfigService.getReaderConfig("isNavLocked") === "yes",
 };
 export function reader(
   state = initState,
@@ -50,6 +50,11 @@ export function reader(
         ...state,
         originalText: action.payload,
       };
+    case "HANDLE_NAV_LOCK":
+      return {
+        ...state,
+        isNavLocked: action.payload,
+      };
     case "HANDLE_HTML_BOOK":
       return {
         ...state,
@@ -80,6 +85,11 @@ export function reader(
       return {
         ...state,
         chapters: action.payload,
+      };
+    case "HANDLE_READER_MODE":
+      return {
+        ...state,
+        readerMode: action.payload,
       };
     default:
       return state;

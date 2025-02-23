@@ -155,7 +155,8 @@ export const openExternalUrl = (url: string, isPlugin: boolean = false) => {
 export const getPageWidth = (
   readerMode: string,
   scale: string,
-  margin: number
+  margin: number,
+  isNavLocked: boolean
 ) => {
   const findValidMultiple = (limit: number) => {
     let multiple = limit - (limit % 12);
@@ -171,23 +172,28 @@ export const getPageWidth = (
   };
   let pageOffset = "";
   let pageWidth = "";
-  if (document.body.clientWidth < 570) {
-    let width = findValidMultiple(document.body.clientWidth - 72);
+  if (document.body.clientWidth < 720) {
+    let width = findValidMultiple(
+      document.body.clientWidth -
+        document.body.clientWidth * 0.4 -
+        (isNavLocked ? 300 : 0)
+    );
     pageOffset = `calc(50vw - ${width / 2}px)`;
     pageWidth = `${width}px`;
-  } else if (readerMode === "scroll") {
-    let width = findValidMultiple(276 * parseFloat(scale) * 2);
+  } else if (readerMode === "scroll" || readerMode === "single") {
+    let preWidth =
+      document.body.clientWidth * parseFloat(scale) -
+      document.body.clientWidth * 0.4 -
+      (isNavLocked ? 300 : 0);
+    let width = findValidMultiple(preWidth);
 
-    pageOffset = `calc(50vw - ${width / 2}px)`;
-    pageWidth = `${width}px`;
-  } else if (readerMode === "single") {
-    let width = findValidMultiple(276 * parseFloat(scale) * 2 - 36);
-
-    pageOffset = `calc(50vw - ${width / 2}px)`;
+    pageOffset = `calc(50vw + ${isNavLocked ? 150 : 0}px - ${width / 2}px)`;
     pageWidth = `${width}px`;
   } else if (readerMode === "double") {
-    let width = findValidMultiple(document.body.clientWidth - 2 * margin - 80);
-    pageOffset = `calc(50vw - ${width / 2}px)`;
+    let width = findValidMultiple(
+      document.body.clientWidth - 2 * margin - 80 - (isNavLocked ? 300 : 0)
+    );
+    pageOffset = `calc(50vw + ${isNavLocked ? 150 : 0}px - ${width / 2}px)`;
     pageWidth = `${width}px`;
   }
   return {
@@ -197,6 +203,7 @@ export const getPageWidth = (
 };
 export const loadFontData = async () => {
   try {
+    if (!window.queryLocalFonts) return [];
     const availableFonts = await window.queryLocalFonts();
     return availableFonts.map((font: any) => {
       return {
@@ -212,15 +219,14 @@ export function removeSearchParams() {
   const url = new URL(window.location.href.split("?")[0]);
   window.history.replaceState({}, document.title, url.toString());
 }
+export const getChatLocale = () => {
+  if (navigator.language.startsWith("zh")) {
+    return "zh_CN";
+  } else {
+    return "en";
+  }
+};
 export function addChatBox() {
-  const getLocale = () => {
-    if (navigator.language.startsWith("zh")) {
-      return "zh_CN";
-    } else {
-      return "en";
-    }
-  };
-  console.log(getLocale());
   const scriptContent = `
     (function (d, t) {
       var BASE_URL = "https://app.chatwoot.com";
@@ -236,10 +242,10 @@ export function addChatBox() {
           baseUrl: BASE_URL,
         });
         window.addEventListener('chatwoot:ready', function() {
-          window.$chatwoot.setLocale('${getLocale()}');
+          window.$chatwoot.setLocale('${getChatLocale()}');
           window.$chatwoot.setCustomAttributes({
             version: '${packageJson.version}',
-            client: '${isElectron ? "desktop" : "web"}',
+            client: 'web',
           });
         });
       };
@@ -311,3 +317,49 @@ export const generateSyncRecord = async () => {
     }
   }
 };
+export const handleContextMenu = (id: string, isInput: boolean = false) => {
+  if (!isElectron) return;
+  const clipboard = window.require("electron").clipboard;
+  const text = clipboard.readText();
+  // fill the text into the box
+  if (!isInput) {
+    let textarea = document.getElementById(id) as HTMLTextAreaElement;
+    textarea.value = text;
+    textarea.textContent = text;
+    triggerReactChange(id, text);
+  } else {
+    document.getElementById(id)?.setAttribute("value", text);
+    triggerReactChange(id, text);
+  }
+};
+function triggerReactChange(id: string, value: string) {
+  const element: any = document.getElementById(id);
+  if (!element) return;
+
+  // 设置值
+  element.value = value;
+
+  // 创建合成事件对象
+  const syntheticEvent = {
+    target: {
+      id: id,
+      value: value,
+    },
+    currentTarget: {
+      value: value,
+    },
+    preventDefault: () => {},
+    stopPropagation: () => {},
+  };
+
+  // 获取 React 实例
+  const reactPropKey = Object.keys(element).find((key) =>
+    key.startsWith("__reactProps$")
+  );
+  const reactInstance = reactPropKey ? element[reactPropKey] : null;
+
+  // 调用 onChange 处理函数
+  if (reactInstance && reactInstance.onChange) {
+    reactInstance.onChange(syntheticEvent);
+  }
+}

@@ -29,6 +29,34 @@ export const driveList = [
     support: ["desktop", "browser", "phone"],
   },
   {
+    label: "MEGA",
+    value: "mega",
+    icon: "icon-mega",
+    isPro: true,
+    support: ["desktop", "browser"],
+  },
+  {
+    label: "Box",
+    value: "boxnet",
+    icon: "icon-box",
+    isPro: true,
+    support: ["desktop", "browser", "phone"],
+  },
+  {
+    label: "pCloud",
+    value: "pcloud",
+    icon: "icon-pcloud",
+    isPro: true,
+    support: ["desktop", "phone"],
+  },
+  {
+    label: "Aliyun Drive",
+    value: "adrive",
+    icon: "icon-adrive",
+    isPro: true,
+    support: ["desktop", "browser", "phone"],
+  },
+  {
     label: "S3 Compatible",
     value: "s3compatible",
     icon: "icon-s3compatible",
@@ -54,6 +82,7 @@ interface ConfigItem {
   label: string;
   value: string;
   type: string;
+  required?: boolean;
 }
 
 // Type the driveInputConfig
@@ -81,6 +110,25 @@ export const driveInputConfig: DriveInputConfig = {
       label: "Password",
       value: "password",
       type: "password",
+    },
+  ],
+  mega: [
+    {
+      label: "Email",
+      value: "email",
+      type: "text",
+    },
+    {
+      label: "Password",
+      value: "password",
+      type: "password",
+    },
+  ],
+  boxnet: [
+    {
+      label: "Token",
+      value: "token",
+      type: "text",
     },
   ],
   ftp: [
@@ -171,7 +219,7 @@ export const driveInputConfig: DriveInputConfig = {
     {
       label: "SecretAccessKey",
       value: "secretAccessKey",
-      type: "text",
+      type: "password",
     },
   ],
   google: [
@@ -191,7 +239,21 @@ export const driveInputConfig: DriveInputConfig = {
   dropbox: [
     {
       label: "Token",
-      value: "code",
+      value: "token",
+      type: "text",
+    },
+  ],
+  pcloud: [
+    {
+      label: "Token",
+      value: "token",
+      type: "text",
+    },
+  ],
+  adrive: [
+    {
+      label: "Token",
+      value: "token",
       type: "text",
     },
   ],

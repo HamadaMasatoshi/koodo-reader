@@ -34,7 +34,6 @@ class ContentList extends React.Component<ContentListProps, ContentListState> {
             "recordLocation",
             {}
           );
-
           let chapter =
             bookLocation.chapterTitle ||
             (this.props.htmlBook && this.props.htmlBook.flattenChapters[0]

@@ -3,14 +3,13 @@ import "./background.css";
 import { BackgroundProps, BackgroundState } from "./interface";
 import { ConfigService } from "../../assets/lib/kookit-extra-browser.min";
 import { Trans } from "react-i18next";
+import { scrollContents } from "../../utils/common";
 class Background extends React.Component<BackgroundProps, BackgroundState> {
   isFirst: Boolean;
   constructor(props: any) {
     super(props);
     this.state = {
-      isSingle:
-        ConfigService.getReaderConfig("readerMode") &&
-        ConfigService.getReaderConfig("readerMode") !== "double",
+      isSingle: this.props.readerMode !== "double",
       prevPage: 0,
       nextPage: 0,
       scale: ConfigService.getReaderConfig("scale") || 1,
@@ -36,6 +35,7 @@ class Background extends React.Component<BackgroundProps, BackgroundState> {
       position,
       "recordLocation"
     );
+    scrollContents(position.chapterTitle, position.chapterHref);
   };
   async handlePageNum(rendition) {
     let pageInfo = await rendition.getProgress();
@@ -57,6 +57,23 @@ class Background extends React.Component<BackgroundProps, BackgroundState> {
           color: ConfigService.getReaderConfig("textColor")
             ? ConfigService.getReaderConfig("textColor")
             : "",
+          width: !this.props.isNavLocked ? "100%" : "calc(100% - 300px)",
+          left: !this.props.isNavLocked ? "0" : "300px",
+          backgroundColor:
+            ConfigService.getReaderConfig("isMergeWord") === "yes"
+              ? "rgba(0,0,0,0)"
+              : ConfigService.getReaderConfig("backgroundColor")
+              ? ConfigService.getReaderConfig("backgroundColor")
+              : ConfigService.getReaderConfig("appSkin") === "night" ||
+                (ConfigService.getReaderConfig("appSkin") === "system" &&
+                  ConfigService.getReaderConfig("isOSNight") === "yes")
+              ? "rgba(44,47,49,1)"
+              : "rgba(255,255,255,1)",
+          filter: `brightnessbrightness(${
+            ConfigService.getReaderConfig("brightness") || 1
+          }) invert(${
+            ConfigService.getReaderConfig("isInvert") === "yes" ? 1 : 0
+          })`,
         }}
       >
         <div className="header-container">

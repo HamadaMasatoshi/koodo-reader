@@ -8,7 +8,7 @@ const initState = {
   isSearch: false,
   isOpenFeedbackDialog: false,
   isAboutOpen: false,
-  isBookSort: ConfigService.getItem("bookSortCode") ? true : false,
+  isBookSort: ConfigService.getReaderConfig("bookSortCode") ? true : false,
   isNoteSort: false,
   isAuthed: false,
   userInfo: null,
@@ -17,7 +17,6 @@ const initState = {
   isSortDisplay: false,
   isShowLoading: false,
   isNewWarning: false,
-  isTipDialog: false,
   isDetailDialog: false,
   isShowNew: false,
   bookSortCode: { sort: 1, order: 2 },
@@ -26,7 +25,6 @@ const initState = {
   message: "Addition successful",
   settingMode: "general",
   settingDrive: "",
-  tip: "",
   selectedBooks: [],
 };
 export function manager(
@@ -89,20 +87,10 @@ export function manager(
         ...state,
         selectedBooks: action.payload,
       };
-    case "HANDLE_TIP_DIALOG":
-      return {
-        ...state,
-        isTipDialog: action.payload,
-      };
     case "HANDLE_DETAIL_DIALOG":
       return {
         ...state,
         isDetailDialog: action.payload,
-      };
-    case "HANDLE_TIP":
-      return {
-        ...state,
-        tip: action.payload,
       };
     case "HANDLE_SEARCH":
       return {

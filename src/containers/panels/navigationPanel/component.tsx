@@ -6,10 +6,11 @@ import { Trans } from "react-i18next";
 import { NavigationPanelProps, NavigationPanelState } from "./interface";
 import SearchBox from "../../../components/searchBox";
 import Parser from "html-react-parser";
-import * as DOMPurify from "dompurify";
+import DOMPurify from "dompurify";
 import EmptyCover from "../../../components/emptyCover";
 import { ConfigService } from "../../../assets/lib/kookit-extra-browser.min";
 import CoverUtil from "../../../utils/file/coverUtil";
+import BookUtil from "../../../utils/file/bookUtil";
 
 class NavigationPanel extends React.Component<
   NavigationPanelProps,
@@ -24,12 +25,17 @@ class NavigationPanel extends React.Component<
       searchList: null,
       startIndex: 0,
       currentIndex: 0,
-      isNavLocked:
-        ConfigService.getReaderConfig("isNavLocked") === "yes" ? true : false,
     };
   }
   handleNavSearchState = (state: string) => {
     this.setState({ searchState: state });
+    if (state) {
+      this.props.handleSearch(true);
+    } else {
+      if (ConfigService.getReaderConfig("isNavLocked") !== "yes") {
+        this.props.handleSearch(false);
+      }
+    }
   };
   handleSearchList = (searchList: any) => {
     this.setState({ searchList });
@@ -42,12 +48,12 @@ class NavigationPanel extends React.Component<
     this.setState({ currentTab });
   };
   handleLock = () => {
-    this.setState({ isNavLocked: !this.state.isNavLocked }, () => {
-      ConfigService.setReaderConfig(
-        "isNavLocked",
-        this.state.isNavLocked ? "yes" : "no"
-      );
-    });
+    this.props.handleNavLock(!this.props.isNavLocked);
+    ConfigService.setReaderConfig(
+      "isNavLocked",
+      !this.props.isNavLocked ? "yes" : "no"
+    );
+    BookUtil.reloadBooks();
   };
   renderBeforeSearch = () => {
     if (this.state.searchState === "searching") {
@@ -184,7 +190,14 @@ class NavigationPanel extends React.Component<
       currentTab: this.state.currentTab,
     };
     return (
-      <div className="navigation-panel">
+      <div
+        className="navigation-panel"
+        style={{
+          backgroundColor: this.props.isNavLocked
+            ? ConfigService.getReaderConfig("backgroundColor")
+            : "",
+        }}
+      >
         {this.state.searchState ? (
           <>
             <div
@@ -225,7 +238,7 @@ class NavigationPanel extends React.Component<
             <div className="navigation-header">
               <span
                 className={
-                  this.state.isNavLocked
+                  this.props.isNavLocked
                     ? "icon-lock nav-lock-icon"
                     : "icon-unlock nav-lock-icon"
                 }

@@ -2,35 +2,28 @@ import React from "react";
 import "./background.css";
 import { BackgroundProps, BackgroundState } from "./interface";
 import { ConfigService } from "../../assets/lib/kookit-extra-browser.min";
-
+import { getPageWidth } from "../../utils/common";
 class Background extends React.Component<BackgroundProps, BackgroundState> {
   isFirst: Boolean;
   constructor(props: any) {
     super(props);
     this.state = {
-      isSingle:
-        ConfigService.getReaderConfig("readerMode") &&
-        ConfigService.getReaderConfig("readerMode") !== "double",
+      isSingle: this.props.readerMode !== "double",
       scale: ConfigService.getReaderConfig("scale") || 1,
+      margin: parseInt(ConfigService.getReaderConfig("margin")) || 0,
+      pageOffset: "",
+      pageWidth: "",
     };
     this.isFirst = true;
   }
   componentDidMount() {
-    let background = document.querySelector(".background");
-    if (!background) return;
-    background?.setAttribute(
-      "style",
-      `background-color:${
-        ConfigService.getReaderConfig("backgroundColor")
-          ? ConfigService.getReaderConfig("backgroundColor")
-          : ConfigService.getReaderConfig("appSkin") === "night" ||
-            (ConfigService.getReaderConfig("appSkin") === "system" &&
-              ConfigService.getReaderConfig("isOSNight") === "yes")
-          ? "rgba(44,47,49,1)"
-          : "rgba(255,255,255,1)"
-      };filter: brightness(${
-        ConfigService.getReaderConfig("brightness") || 1
-      }) invert(${ConfigService.getReaderConfig("isInvert") === "yes" ? 1 : 0})`
+    this.setState(
+      getPageWidth(
+        this.props.readerMode,
+        this.state.scale,
+        this.state.margin,
+        this.props.isNavLocked
+      )
     );
   }
 
@@ -40,37 +33,31 @@ class Background extends React.Component<BackgroundProps, BackgroundState> {
         <div
           className="background-box2"
           style={
-            document.body.clientWidth < 570
+            document.body.clientWidth < 720
               ? { left: 5, right: 8 }
               : this.state.isSingle
               ? {
-                  left: `calc(50vw - ${
-                    270 * parseFloat(this.state.scale)
-                  }px - ${this.state.isSingle ? "9" : "5"}px)`,
-                  right: `calc(50vw - ${
-                    270 * parseFloat(this.state.scale)
-                  }px - 7px)`,
+                  left: this.state.pageOffset,
+                  marginLeft: -50,
+                  width: `calc(${this.state.pageWidth} + 98px)`,
                   boxShadow: "0 0 0px rgba(191, 191, 191, 1)",
                 }
-              : {}
+              : { left: this.props.isNavLocked ? 305 : 5 }
           }
         ></div>
 
         <div
           className="background-box3"
           style={
-            document.body.clientWidth < 570
+            document.body.clientWidth < 720
               ? { left: 5, right: 10 }
               : this.state.isSingle
               ? {
-                  left: `calc(50vw - ${
-                    270 * parseFloat(this.state.scale)
-                  }px - 9px)`,
-                  right: `calc(50vw - ${
-                    270 * parseFloat(this.state.scale)
-                  }px - 9px)`,
+                  marginLeft: -50,
+                  left: this.state.pageOffset,
+                  width: `calc(${this.state.pageWidth} + 100px)`,
                 }
-              : {}
+              : { left: this.props.isNavLocked ? 307 : 7 }
           }
         >
           {(!ConfigService.getReaderConfig("backgroundColor") &&
@@ -133,19 +120,16 @@ class Background extends React.Component<BackgroundProps, BackgroundState> {
         <div
           className="background-box1"
           style={
-            document.body.clientWidth < 570
+            document.body.clientWidth < 720
               ? { left: 5, right: 6 }
               : this.state.isSingle
               ? {
-                  left: `calc(50vw - ${
-                    270 * parseFloat(this.state.scale)
-                  }px - ${this.state.isSingle ? "9" : "5"}px)`,
-                  right: `calc(50vw - ${
-                    270 * parseFloat(this.state.scale)
-                  }px - 5px)`,
+                  marginLeft: -50,
+                  left: this.state.pageOffset,
+                  width: `calc(${this.state.pageWidth} + 102px)`,
                   boxShadow: "0 0 0px rgba(191, 191, 191, 1)",
                 }
-              : {}
+              : { left: this.props.isNavLocked ? 309 : 9 }
           }
         ></div>
       </>

@@ -93,6 +93,7 @@ class ImportLocal extends React.Component<ImportLocalProps, ImportLocalState> {
           ConfigService.getReaderConfig("isPreventAdd") !== "yes"
         ) {
           BookUtil.addBook(book.key, book.format.toLowerCase(), buffer);
+          CoverUtil.addCover(book);
         }
         if (ConfigService.getReaderConfig("isPreventAdd") === "yes") {
           this.handleJump(book);
@@ -150,7 +151,7 @@ class ImportLocal extends React.Component<ImportLocalProps, ImportLocalState> {
         try {
           await this.handleBook(file, md5);
         } catch (error) {
-          console.log(error, "564565");
+          console.log(error);
         }
 
         return resolve();
@@ -221,7 +222,9 @@ class ImportLocal extends React.Component<ImportLocalProps, ImportLocalState> {
               );
               if (
                 (ConfigService.getReaderConfig("isPrecacheBook") === "yes" ||
-                  this.props.isAuthed) &&
+                  (this.props.isAuthed &&
+                    ConfigService.getReaderConfig("isDisableMobilePrecache") !==
+                      "yes")) &&
                 extension !== "pdf"
               ) {
                 let cache = await rendition.preCache(file_content);

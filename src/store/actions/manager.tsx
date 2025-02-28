@@ -27,14 +27,8 @@ export function handleSearch(isSearch: boolean) {
 export function handleUserInfo(userInfo: any) {
   return { type: "HANDLE_USER_INFO", payload: userInfo };
 }
-export function handleTipDialog(isTipDialog: boolean) {
-  return { type: "HANDLE_TIP_DIALOG", payload: isTipDialog };
-}
 export function handleDetailDialog(isDetailDialog: boolean) {
   return { type: "HANDLE_DETAIL_DIALOG", payload: isDetailDialog };
-}
-export function handleTip(tip: string) {
-  return { type: "HANDLE_TIP", payload: tip };
 }
 export function handleSetting(isSettingOpen: boolean) {
   return { type: "HANDLE_SETTING", payload: isSettingOpen };
@@ -128,10 +122,14 @@ export function handleFetchPlugins() {
 }
 export function handleFetchAuthed() {
   return (dispatch: Dispatch) => {
-    TokenService.getToken("is_authed").then((value) => {
-      let isAuthed = value === "yes";
-      dispatch(handleAuthed(isAuthed));
-    });
+    try {
+      TokenService.getToken("is_authed").then((value) => {
+        let isAuthed = value === "yes";
+        dispatch(handleAuthed(isAuthed));
+      });
+    } catch (error) {
+      console.log(error);
+    }
   };
 }
 export function handleFetchBookSortCode() {

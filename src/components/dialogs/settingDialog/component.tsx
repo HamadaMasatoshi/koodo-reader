@@ -19,11 +19,13 @@ import {
   langList,
   searchList,
   skinList,
+  syncSettingList,
 } from "../../../constants/settingList";
 import { themeList } from "../../../constants/themeList";
 import toast from "react-hot-toast";
 import {
   checkPlugin,
+  handleContextMenu,
   loadFontData,
   openExternalUrl,
 } from "../../../utils/common";
@@ -79,8 +81,11 @@ class SettingDialog extends React.Component<
       isDisableUpdate:
         ConfigService.getReaderConfig("isDisableUpdate") === "yes",
       isPrecacheBook: ConfigService.getReaderConfig("isPrecacheBook") === "yes",
+      isDisableMobilePrecache:
+        ConfigService.getReaderConfig("isDisableMobilePrecache") === "yes",
       appSkin: ConfigService.getReaderConfig("appSkin"),
       isUseBuiltIn: ConfigService.getReaderConfig("isUseBuiltIn") === "yes",
+      isKeepLocal: ConfigService.getReaderConfig("isKeepLocal") === "yes",
       isDisableCrop: ConfigService.getReaderConfig("isDisableCrop") === "yes",
       isDisablePDFCover:
         ConfigService.getReaderConfig("isDisablePDFCover") === "yes",
@@ -156,10 +161,18 @@ class SettingDialog extends React.Component<
   };
   handleSetting = (stateName: string) => {
     this.setState({ [stateName]: !this.state[stateName] } as any);
-    ConfigService.setReaderConfig(
-      stateName,
-      this.state[stateName] ? "no" : "yes"
-    );
+    if (
+      stateName === "isKeepLocal" ||
+      stateName === "isDisableMobilePrecache"
+    ) {
+      ConfigService.setItem(stateName, this.state[stateName] ? "no" : "yes");
+    } else {
+      ConfigService.setReaderConfig(
+        stateName,
+        this.state[stateName] ? "no" : "yes"
+      );
+    }
+
     this.handleRest(this.state[stateName]);
   };
   handleChangeLocation = async () => {
@@ -295,31 +308,49 @@ class SettingDialog extends React.Component<
       toast.error(this.props.t("At least one login option should be kept"));
       return;
     }
-    toast.loading(this.props.t("Removing..."));
+    toast.loading(this.props.t("Removing..."), {
+      id: "remove-login-option",
+    });
     let userRequest = await getUserRequest();
     let response = await userRequest.removeLogin({
       provider: event.target.value,
     });
     if (response.code === 200) {
-      toast.success(this.props.t("Removal successful"));
+      toast.success(this.props.t("Removal successful"), {
+        id: "remove-login-option",
+      });
       this.props.handleFetchLoginOptionList();
-      toast.success(this.props.t("Deletion successful"));
     } else if (response.code === 401) {
+      toast.error(
+        this.props.t("Removal failed, error code") + ": " + response.msg,
+        {
+          id: "remove-login-option",
+        }
+      );
       handleExitApp();
       return;
     } else {
-      toast.error(this.props.t("Removal failed, error code: ") + response.code);
+      toast.error(
+        this.props.t("Removal failed, error code") + ": " + response.msg,
+        {
+          id: "remove-login-option",
+        }
+      );
     }
   };
   handleCancelLoginOption = async () => {
     this.setState({ settingLogin: "" });
   };
   handleConfirmLoginOption = async () => {
+    if (!this.state.loginConfig.token || !this.state.settingLogin) {
+      toast.error(this.props.t("Missing parameters") + this.props.t("Token"));
+      return;
+    }
     this.props.handleLoadingDialog(true);
-    let resCode = 200;
+    let res = { code: 200 };
     if (this.props.isAuthed) {
       let userRequest = await getUserRequest();
-      let response = await userRequest.addLogin({
+      res = await userRequest.addLogin({
         code: this.state.loginConfig.token,
         provider: this.state.settingLogin,
         scope:
@@ -327,14 +358,13 @@ class SettingDialog extends React.Component<
             .scope,
         redirect_uri: KookitConfig.ThirdpartyConfig.callbackUrl,
       });
-      resCode = response.code;
     } else {
-      resCode = await loginRegister(
+      res = await loginRegister(
         this.state.settingLogin,
         this.state.loginConfig.token
       );
     }
-    if (resCode === 200) {
+    if (res.code === 200) {
       this.props.handleLoadingDialog(false);
       toast.success(this.props.t("Login successful"));
       this.props.handleFetchAuthed();
@@ -342,27 +372,43 @@ class SettingDialog extends React.Component<
       this.setState({ settingLogin: "" });
     } else {
       this.props.handleLoadingDialog(false);
-      toast.error(this.props.t("Login failed"));
+      toast.error(this.props.t("Login failed, error code"));
     }
   };
   handleCancelDrive = () => {
     this.props.handleSettingDrive("");
   };
   handleConfirmDrive = async () => {
+    let flag = true;
+    for (let item of driveInputConfig[this.props.settingDrive]) {
+      if (!this.state.driveConfig[item.value]) {
+        toast.error(
+          this.props.t("Missing parameters") + ": " + this.props.t(item.label)
+        );
+        flag = false;
+        break;
+      }
+    }
+    if (!flag) {
+      return;
+    }
     if (
       this.props.settingDrive === "webdav" ||
       this.props.settingDrive === "ftp" ||
       this.props.settingDrive === "sftp" ||
+      this.props.settingDrive === "mega" ||
       this.props.settingDrive === "s3compatible"
     ) {
       toast.loading(i18n.t("Adding"), { id: "adding-sync-id" });
-      let code = await encryptToken(
+      let res = await encryptToken(
         this.props.settingDrive,
         this.state.driveConfig
       );
-      if (code === 200) {
+      if (res.code === 200) {
         ConfigService.setListConfig(this.props.settingDrive, "dataSourceList");
         toast.success(i18n.t("Binding successful"), { id: "adding-sync-id" });
+      } else {
+        toast.error(i18n.t("Binding failed"), { id: "adding-sync-id" });
       }
     } else {
       await onSyncCallback(
@@ -376,6 +422,58 @@ class SettingDialog extends React.Component<
     }
     this.props.handleFetchDataSourceList();
     this.props.handleSettingDrive("");
+  };
+  renderSwitchOption = (optionList: any[]) => {
+    return optionList.map((item) => {
+      return (
+        <div
+          style={item.isElectron ? (isElectron ? {} : { display: "none" }) : {}}
+          key={item.propName}
+        >
+          <div className="setting-dialog-new-title" key={item.title}>
+            <span style={{ width: "calc(100% - 100px)" }}>
+              <Trans>{item.title}</Trans>
+            </span>
+
+            <span
+              className="single-control-switch"
+              onClick={() => {
+                switch (item.propName) {
+                  case "isMergeWord":
+                    this.handleMergeWord();
+                    break;
+                  case "isOpenInMain":
+                    this.handleOpenInMain();
+                    break;
+                  default:
+                    this.handleSetting(item.propName);
+                    break;
+                }
+              }}
+              style={this.state[item.propName] ? {} : { opacity: 0.6 }}
+            >
+              <span
+                className="single-control-button"
+                style={
+                  this.state[item.propName]
+                    ? {
+                        transform: "translateX(20px)",
+                        transition: "transform 0.5s ease",
+                      }
+                    : {
+                        transform: "translateX(0px)",
+                        transition: "transform 0.5s ease",
+                      }
+                }
+              ></span>
+            </span>
+          </div>
+          <p className="setting-option-subtitle">
+            <Trans>{item.desc}</Trans>
+          </p>
+        </div>
+      );
+    });
   };
   render() {
     return (
@@ -456,8 +554,12 @@ class SettingDialog extends React.Component<
               className="book-bookmark-title"
               style={
                 this.props.settingMode === "sync"
-                  ? { fontWeight: "bold", borderBottom: "2px solid" }
-                  : { opacity: 0.5 }
+                  ? {
+                      fontWeight: "bold",
+                      borderBottom: "2px solid",
+                      lineHeight: "20px",
+                    }
+                  : { opacity: 0.5, lineHeight: "20px" }
               }
               onClick={() => {
                 this.props.handleSettingMode("sync");
@@ -484,6 +586,7 @@ class SettingDialog extends React.Component<
           className="setting-close-container"
           onClick={() => {
             this.props.handleSetting(false);
+            this.props.handleSettingMode("general");
           }}
         >
           <span className="icon-close setting-close"></span>
@@ -492,64 +595,7 @@ class SettingDialog extends React.Component<
         <div className="setting-dialog-info">
           {this.props.settingMode === "general" ? (
             <>
-              {generalSettingList.map((item) => {
-                return (
-                  <div
-                    style={
-                      item.isElectron
-                        ? isElectron
-                          ? {}
-                          : { display: "none" }
-                        : {}
-                    }
-                    key={item.propName}
-                  >
-                    <div className="setting-dialog-new-title" key={item.title}>
-                      <span style={{ width: "250px" }}>
-                        <Trans>{item.title}</Trans>
-                      </span>
-
-                      <span
-                        className="single-control-switch"
-                        onClick={() => {
-                          switch (item.propName) {
-                            case "isMergeWord":
-                              this.handleMergeWord();
-                              break;
-                            case "isOpenInMain":
-                              this.handleOpenInMain();
-                              break;
-                            default:
-                              this.handleSetting(item.propName);
-                              break;
-                          }
-                        }}
-                        style={
-                          this.state[item.propName] ? {} : { opacity: 0.6 }
-                        }
-                      >
-                        <span
-                          className="single-control-button"
-                          style={
-                            this.state[item.propName]
-                              ? {
-                                  transform: "translateX(20px)",
-                                  transition: "transform 0.5s ease",
-                                }
-                              : {
-                                  transform: "translateX(0px)",
-                                  transition: "transform 0.5s ease",
-                                }
-                          }
-                        ></span>
-                      </span>
-                    </div>
-                    <p className="setting-option-subtitle">
-                      <Trans>{item.desc}</Trans>
-                    </p>
-                  </div>
-                );
-              })}
+              {this.renderSwitchOption(generalSettingList)}
 
               {isElectron && (
                 <>
@@ -660,64 +706,7 @@ class SettingDialog extends React.Component<
             </>
           ) : this.props.settingMode === "reading" ? (
             <>
-              {readingSettingList.map((item) => {
-                return (
-                  <div
-                    style={
-                      item.isElectron
-                        ? isElectron
-                          ? {}
-                          : { display: "none" }
-                        : {}
-                    }
-                    key={item.propName}
-                  >
-                    <div className="setting-dialog-new-title" key={item.title}>
-                      <span style={{ width: "250px" }}>
-                        <Trans>{item.title}</Trans>
-                      </span>
-
-                      <span
-                        className="single-control-switch"
-                        onClick={() => {
-                          switch (item.propName) {
-                            case "isMergeWord":
-                              this.handleMergeWord();
-                              break;
-                            case "isOpenInMain":
-                              this.handleOpenInMain();
-                              break;
-                            default:
-                              this.handleSetting(item.propName);
-                              break;
-                          }
-                        }}
-                        style={
-                          this.state[item.propName] ? {} : { opacity: 0.6 }
-                        }
-                      >
-                        <span
-                          className="single-control-button"
-                          style={
-                            this.state[item.propName]
-                              ? {
-                                  transform: "translateX(20px)",
-                                  transition: "transform 0.5s ease",
-                                }
-                              : {
-                                  transform: "translateX(0px)",
-                                  transition: "transform 0.5s ease",
-                                }
-                          }
-                        ></span>
-                      </span>
-                    </div>
-                    <p className="setting-option-subtitle">
-                      <Trans>{item.desc}</Trans>
-                    </p>
-                  </div>
-                );
-              })}
+              {this.renderSwitchOption(readingSettingList)}
               {isElectron && (
                 <>
                   <div className="setting-dialog-new-title">
@@ -737,64 +726,7 @@ class SettingDialog extends React.Component<
             </>
           ) : this.props.settingMode === "appearance" ? (
             <>
-              {appearanceSettingList.map((item) => {
-                return (
-                  <div
-                    style={
-                      item.isElectron
-                        ? isElectron
-                          ? {}
-                          : { display: "none" }
-                        : {}
-                    }
-                    key={item.propName}
-                  >
-                    <div className="setting-dialog-new-title" key={item.title}>
-                      <span style={{ width: "250px" }}>
-                        <Trans>{item.title}</Trans>
-                      </span>
-
-                      <span
-                        className="single-control-switch"
-                        onClick={() => {
-                          switch (item.propName) {
-                            case "isMergeWord":
-                              this.handleMergeWord();
-                              break;
-                            case "isOpenInMain":
-                              this.handleOpenInMain();
-                              break;
-                            default:
-                              this.handleSetting(item.propName);
-                              break;
-                          }
-                        }}
-                        style={
-                          this.state[item.propName] ? {} : { opacity: 0.6 }
-                        }
-                      >
-                        <span
-                          className="single-control-button"
-                          style={
-                            this.state[item.propName]
-                              ? {
-                                  transform: "translateX(20px)",
-                                  transition: "transform 0.5s ease",
-                                }
-                              : {
-                                  transform: "translateX(0px)",
-                                  transition: "transform 0.5s ease",
-                                }
-                          }
-                        ></span>
-                      </span>
-                    </div>
-                    <p className="setting-option-subtitle">
-                      <Trans>{item.desc}</Trans>
-                    </p>
-                  </div>
-                );
-              })}
+              {this.renderSwitchOption(appearanceSettingList)}
               <div className="setting-dialog-new-title">
                 <Trans>Theme color</Trans>
                 <ul className="theme-setting-container">
@@ -881,6 +813,7 @@ class SettingDialog extends React.Component<
                   {this.props.settingDrive === "webdav" ||
                   this.props.settingDrive === "ftp" ||
                   this.props.settingDrive === "sftp" ||
+                  this.props.settingDrive === "mega" ||
                   this.props.settingDrive === "s3compatible" ? (
                     <>
                       {driveInputConfig[this.props.settingDrive].map((item) => {
@@ -891,12 +824,20 @@ class SettingDialog extends React.Component<
                             key={item.value}
                             placeholder={this.props.t(item.label)}
                             onChange={(e) => {
-                              this.setState((prevState) => ({
-                                driveConfig: {
-                                  ...prevState.driveConfig,
-                                  [item.value]: e.target.value,
-                                },
-                              }));
+                              if (e.target.value) {
+                                this.setState((prevState) => ({
+                                  driveConfig: {
+                                    ...prevState.driveConfig,
+                                    [item.value]: e.target.value.trim(),
+                                  },
+                                }));
+                              }
+                            }}
+                            onContextMenu={() => {
+                              handleContextMenu(
+                                "token-dialog-" + item.value + "-box",
+                                true
+                              );
                             }}
                             id={"token-dialog-" + item.value + "-box"}
                             className="token-dialog-username-box"
@@ -913,12 +854,17 @@ class SettingDialog extends React.Component<
                           "Please authorize your account, and fill the following box with the token"
                         )}
                         onChange={(e) => {
-                          this.setState((prevState) => ({
-                            driveConfig: {
-                              ...prevState.driveConfig,
-                              token: e.target.value,
-                            },
-                          }));
+                          if (e.target.value) {
+                            this.setState((prevState) => ({
+                              driveConfig: {
+                                ...prevState.driveConfig,
+                                token: e.target.value.trim(),
+                              },
+                            }));
+                          }
+                        }}
+                        onContextMenu={() => {
+                          handleContextMenu("token-dialog-token-box");
                         }}
                       />
                     </>
@@ -932,6 +878,7 @@ class SettingDialog extends React.Component<
                     >
                       <Trans>Bind</Trans>
                     </div>
+
                     <div className="voice-add-button-container">
                       <div
                         className="voice-add-cancel"
@@ -943,11 +890,14 @@ class SettingDialog extends React.Component<
                       </div>
                       {(this.props.settingDrive === "dropbox" ||
                         this.props.settingDrive === "google" ||
+                        this.props.settingDrive === "boxnet" ||
+                        this.props.settingDrive === "pcloud" ||
+                        this.props.settingDrive === "adrive" ||
                         this.props.settingDrive === "microsoft") && (
                         <div
                           className="voice-add-confirm"
                           style={{ marginRight: "10px" }}
-                          onClick={() => {
+                          onClick={async () => {
                             this.handleJump(
                               new SyncUtil(
                                 this.props.settingDrive,
@@ -959,6 +909,91 @@ class SettingDialog extends React.Component<
                           <Trans>Authorize</Trans>
                         </div>
                       )}
+                      {isElectron &&
+                        (this.props.settingDrive === "webdav" ||
+                          this.props.settingDrive === "ftp" ||
+                          this.props.settingDrive === "sftp" ||
+                          this.props.settingDrive === "mega" ||
+                          this.props.settingDrive === "s3compatible") && (
+                          <div
+                            className="voice-add-confirm"
+                            style={{ marginRight: "10px" }}
+                            onClick={async () => {
+                              toast.loading(
+                                this.props.t("Testing connection..."),
+                                {
+                                  id: "testing-connection-id",
+                                }
+                              );
+                              const { ipcRenderer } =
+                                window.require("electron");
+                              const fs = window.require("fs");
+                              fs.writeFileSync(
+                                getStorageLocation() + "/config/test.txt",
+                                "Hello world!"
+                              );
+                              let driveConfig: any = {};
+                              for (let item in this.state.driveConfig) {
+                                driveConfig[item] =
+                                  this.state.driveConfig[item];
+                              }
+                              let result = await ipcRenderer.invoke(
+                                "cloud-upload",
+                                {
+                                  ...driveConfig,
+                                  fileName: "test.txt",
+                                  service: this.props.settingDrive,
+                                  type: "config",
+                                  storagePath: getStorageLocation(),
+                                  isUseCache: false,
+                                }
+                              );
+                              if (result) {
+                                toast.success(
+                                  this.props.t("Connection successful"),
+                                  {
+                                    id: "testing-connection-id",
+                                  }
+                                );
+                                await ipcRenderer.invoke("cloud-delete", {
+                                  ...driveConfig,
+                                  fileName: "test.txt",
+                                  service: this.props.settingDrive,
+                                  type: "config",
+                                  storagePath: getStorageLocation(),
+                                  isUseCache: false,
+                                });
+                              } else {
+                                toast.error(this.props.t("Connection failed"), {
+                                  id: "testing-connection-id",
+                                });
+                              }
+                              fs.unlinkSync(
+                                getStorageLocation() + "/config/test.txt"
+                              );
+                            }}
+                          >
+                            <Trans>Test</Trans>
+                          </div>
+                        )}
+                      {(this.props.settingDrive === "webdav" ||
+                        this.props.settingDrive === "ftp" ||
+                        this.props.settingDrive === "sftp") &&
+                        (ConfigService.getReaderConfig("lang") === "zhCN" ||
+                          ConfigService.getReaderConfig("lang") === "zhTW" ||
+                          ConfigService.getReaderConfig("lang") === "zhMO") && (
+                          <div
+                            className="voice-add-cancel"
+                            style={{ borderWidth: 0 }}
+                            onClick={() => {
+                              openExternalUrl(
+                                "https://www.koodoreader.com/zh/add-source"
+                              );
+                            }}
+                          >
+                            {this.props.t("How to fill out")}
+                          </div>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -1053,6 +1088,7 @@ class SettingDialog extends React.Component<
                   </select>
                 </div>
               )}
+              {this.renderSwitchOption(syncSettingList)}
             </>
           ) : this.props.settingMode === "account" ? (
             <>
@@ -1071,13 +1107,18 @@ class SettingDialog extends React.Component<
                     placeholder={this.props.t(
                       "Please authorize your account, and fill the following box with the token"
                     )}
+                    onContextMenu={() => {
+                      handleContextMenu("token-dialog-token-box");
+                    }}
                     onChange={(e) => {
-                      this.setState((prevState) => ({
-                        loginConfig: {
-                          ...prevState.loginConfig,
-                          token: e.target.value,
-                        },
-                      }));
+                      if (e.target.value) {
+                        this.setState((prevState) => ({
+                          loginConfig: {
+                            ...prevState.loginConfig,
+                            token: e.target.value.trim(),
+                          },
+                        }));
+                      }
                     }}
                   />
                   <div className="token-dialog-button-container">
@@ -1268,6 +1309,9 @@ class SettingDialog extends React.Component<
                     )}
                     id="voice-add-content-box"
                     className="voice-add-content-box"
+                    onContextMenu={() => {
+                      handleContextMenu("voice-add-content-box");
+                    }}
                   />
                   <div className="token-dialog-button-container">
                     <div

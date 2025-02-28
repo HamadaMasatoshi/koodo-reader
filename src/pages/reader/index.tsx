@@ -4,6 +4,7 @@ import {
   handleFetchBooks,
   handleReadingBook,
   handleFetchPercentage,
+  handleReaderMode,
 } from "../../store/actions";
 import { connect } from "react-redux";
 import { stateType } from "../../store";
@@ -15,6 +16,9 @@ const mapStateToProps = (state: stateType) => {
     currentBook: state.book.currentBook,
     percentage: state.progressPanel.percentage,
     htmlBook: state.reader.htmlBook,
+    readerMode: state.reader.readerMode,
+    isNavLocked: state.reader.isNavLocked,
+    isSearch: state.manager.isSearch,
   };
 };
 const actionCreator = {
@@ -23,6 +27,7 @@ const actionCreator = {
   handleFetchBooks,
   handleReadingBook,
   handleFetchPercentage,
+  handleReaderMode,
 };
 export default connect(
   mapStateToProps,

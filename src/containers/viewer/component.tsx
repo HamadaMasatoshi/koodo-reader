@@ -40,7 +40,6 @@ class Viewer extends React.Component<ViewerProps, ViewerState> {
           "recordLocation",
           {}
         ).chapterTitle || "",
-      readerMode: ConfigService.getReaderConfig("readerMode") || "double",
       isDisablePopup: ConfigService.getReaderConfig("isDisablePopup") === "yes",
       isTouch: ConfigService.getReaderConfig("isTouch") === "yes",
       margin: parseInt(ConfigService.getReaderConfig("margin")) || 0,
@@ -68,7 +67,12 @@ class Viewer extends React.Component<ViewerProps, ViewerState> {
     this.handleRenderBook();
     //make sure page width is always 12 times, section = Math.floor(element.clientWidth / 12), or text will be blocked
     this.setState(
-      getPageWidth(this.state.readerMode, this.state.scale, this.state.margin)
+      getPageWidth(
+        this.props.readerMode,
+        this.state.scale,
+        this.state.margin,
+        this.props.isNavLocked
+      )
     );
     this.props.handleRenderBookFunc(this.handleRenderBook);
 
@@ -126,16 +130,23 @@ class Viewer extends React.Component<ViewerProps, ViewerState> {
     ).then(async (result: any) => {
       if (!result) {
         if (this.props.defaultSyncOption) {
-          await BookUtil.downloadBook(key, format.toLowerCase());
+          let result = await BookUtil.downloadBook(key, format.toLowerCase());
+          if (result) {
+            toast.success(this.props.t("Offline successful"));
+          } else {
+            toast.error(this.props.t("Offline failed"));
+            return;
+          }
         } else {
           toast.error(this.props.t("Book not exists"));
           return;
         }
       }
+
       let rendition = BookHelper.getRendtion(
         result,
         isCacheExsit ? "CACHE" : format,
-        this.state.readerMode,
+        this.props.readerMode,
         this.props.currentBook.charset,
         ConfigService.getReaderConfig("isSliding") === "yes" ? "sliding" : "",
         ConfigService.getReaderConfig("isBionic"),
@@ -156,7 +167,7 @@ class Viewer extends React.Component<ViewerProps, ViewerState> {
     HtmlMouseEvent(
       rendition,
       this.props.currentBook.key,
-      this.state.readerMode
+      this.props.readerMode
     );
     let chapters = rendition.getChapter();
     let chapterDocs = rendition.getChapterDoc();
@@ -354,21 +365,21 @@ class Viewer extends React.Component<ViewerProps, ViewerState> {
         )}
         <div
           className={
-            this.state.readerMode === "scroll"
+            this.props.readerMode === "scroll"
               ? "html-viewer-page scrolling-html-viewer-page"
               : "html-viewer-page"
           }
           id="page-area"
           style={
-            this.state.readerMode === "scroll" &&
+            this.props.readerMode === "scroll" &&
             document.body.clientWidth >= 570
               ? {
-                  marginLeft: this.state.pageOffset,
-                  marginRight: this.state.pageOffset,
-                  paddingLeft: "20px",
+                  // marginLeft: this.state.pageOffset,
+                  // marginRight: this.state.pageOffset,
+                  paddingLeft: "0px",
                   paddingRight: "15px",
-                  left: 0,
-                  right: 0,
+                  left: this.state.pageOffset,
+                  width: this.state.pageWidth,
                 }
               : {
                   left: this.state.pageOffset,

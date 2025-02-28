@@ -3,7 +3,10 @@ import "./header.css";
 import SearchBox from "../../components/searchBox";
 import ImportLocal from "../../components/importLocal";
 import { HeaderProps, HeaderState } from "./interface";
-import { ConfigService } from "../../assets/lib/kookit-extra-browser.min";
+import {
+  ConfigService,
+  TokenService,
+} from "../../assets/lib/kookit-extra-browser.min";
 import UpdateInfo from "../../components/dialogs/updateDialog";
 import { restoreFromConfigJson } from "../../utils/file/restore";
 import { backupToConfigJson } from "../../utils/file/backup";
@@ -21,7 +24,12 @@ import ConfigUtil from "../../utils/file/configUtil";
 import DatabaseService from "../../utils/storage/databaseService";
 import CoverUtil from "../../utils/file/coverUtil";
 import BookUtil from "../../utils/file/bookUtil";
-import { addChatBox, removeChatBox } from "../../utils/common";
+import {
+  addChatBox,
+  getChatLocale,
+  openExternalUrl,
+  removeChatBox,
+} from "../../utils/common";
 import { driveList } from "../../constants/driveList";
 
 class Header extends React.Component<HeaderProps, HeaderState> {
@@ -101,28 +109,42 @@ class Header extends React.Component<HeaderProps, HeaderState> {
       this.props.handleFetchNotes();
       this.props.handleFetchBookmarks();
     });
-    if (this.props.isAuthed && this.props.books) {
-      if (ConfigService.getReaderConfig("isProUpgraded") !== "yes") {
-        toast.loading(this.props.t("Upgrading, please wait..."), {
-          id: "upgrading",
-        });
-        await upgradePro(this.props.books);
-        toast.success(this.props.t("Upgrade successful"), {
-          id: "upgrading",
-        });
-        ConfigService.setReaderConfig("isProUpgraded", "yes");
-      }
-    }
   }
   async UNSAFE_componentWillReceiveProps(
     nextProps: Readonly<HeaderProps>,
     _nextContext: any
   ) {
     if (nextProps.isAuthed && nextProps.isAuthed !== this.props.isAuthed) {
-      addChatBox();
+      if (isElectron) {
+        window.require("electron").ipcRenderer.invoke("new-chat", {
+          url: "https://dl.koodoreader.com/chat.html",
+          locale: getChatLocale(),
+        });
+      } else {
+        addChatBox();
+      }
+      if (
+        this.props.books &&
+        ConfigService.getReaderConfig("isProUpgraded") !== "yes"
+      ) {
+        try {
+          await upgradePro(this.props.books);
+        } catch (error) {
+          console.log(error);
+        }
+
+        ConfigService.setReaderConfig("isProUpgraded", "yes");
+      }
     }
     if (!nextProps.isAuthed && nextProps.isAuthed !== this.props.isAuthed) {
-      removeChatBox();
+      if (isElectron) {
+        window.require("electron").ipcRenderer.invoke("new-chat", {
+          url: "https://dl.koodoreader.com/chat.html",
+          locale: getChatLocale(),
+        });
+      } else {
+        removeChatBox();
+      }
     }
   }
   handleFinishUpgrade = () => {
@@ -142,7 +164,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
       }
     }
     if (!result) {
-      toast.error(this.props.t("Sync Failed"));
+      toast.error(this.props.t("Sync failed"));
     } else {
       toast.success(
         this.props.t("Synchronisation successful") +
@@ -150,27 +172,32 @@ class Header extends React.Component<HeaderProps, HeaderState> {
           this.props.t("Local") +
           ")"
       );
+      toast.success(
+        this.props.t(
+          "Your data has been imported from your local folder, Upgrade to pro to get more advanced features"
+        ),
+        {
+          duration: 4000,
+        }
+      );
     }
   };
   handleLocalSync = async () => {
-    if (ConfigService.getReaderConfig("isFirst") !== "no") {
-      this.props.handleTipDialog(true);
-      this.props.handleTip(
-        "Sync function works with third-party cloud drive. You need to manually change the storage location to the same sync folder on different computers. When you click the sync button, Koodo Reader will automatically upload or download the data from this folder according the timestamp."
-      );
-      ConfigService.setReaderConfig("isFirst", "no");
-      this.setState({ isSync: false });
-      return;
-    }
     let lastSyncTime = getLastSyncTimeFromConfigJson();
-    if (
-      ConfigService.getItem("lastSyncTime") &&
-      lastSyncTime < parseInt(ConfigService.getItem("lastSyncTime")!)
-    ) {
+    console.log(lastSyncTime, ConfigService.getItem("lastSyncTime"));
+    if (!lastSyncTime && ConfigService.getItem("lastSyncTime")) {
       await this.syncToLocation();
     } else {
-      await this.syncFromLocation();
+      if (
+        ConfigService.getItem("lastSyncTime") &&
+        lastSyncTime < parseInt(ConfigService.getItem("lastSyncTime")!)
+      ) {
+        await this.syncToLocation();
+      } else {
+        await this.syncFromLocation();
+      }
     }
+
     this.setState({ isSync: false });
   };
   handleFinish = async () => {
@@ -182,9 +209,7 @@ class Header extends React.Component<HeaderProps, HeaderState> {
   };
   beforeSync = async () => {
     if (!this.props.defaultSyncOption) {
-      toast.error(
-        this.props.t("Please set default sync option in the setting")
-      );
+      toast.error(this.props.t("Please add data source in the setting"));
       this.setState({ isSync: false });
       return false;
     }
@@ -205,8 +230,10 @@ class Header extends React.Component<HeaderProps, HeaderState> {
     toast.loading(
       this.props.t("Start syncing") +
         " (" +
-        driveList.find((item) => item.value === this.props.defaultSyncOption)
-          ?.label +
+        this.props.t(
+          driveList.find((item) => item.value === this.props.defaultSyncOption)
+            ?.label || ""
+        ) +
         ")",
       { id: "syncing-id" }
     );
@@ -215,40 +242,21 @@ class Header extends React.Component<HeaderProps, HeaderState> {
   getCompareResult = async () => {
     let localSyncRecords = ConfigService.getAllSyncRecord();
     let cloudSyncRecords = await ConfigUtil.getCloudConfig("sync");
-    return await SyncHelper.compareAll(localSyncRecords, cloudSyncRecords);
+    return await SyncHelper.compareAll(
+      localSyncRecords,
+      cloudSyncRecords,
+      ConfigService,
+      TokenService,
+      ConfigUtil
+    );
   };
   handleCloudSync = async () => {
     let res = await this.beforeSync();
     if (!res) {
       return;
     }
-    let { compareResult, syncRecords } = await this.getCompareResult();
-    if (
-      compareResult["books"].conflict.length > 0 ||
-      compareResult["notes"].conflict.length > 0 ||
-      compareResult["bookmarks"].conflict.length > 0 ||
-      compareResult["plugins"].conflict.length > 0 ||
-      compareResult["words"].conflict.length > 0 ||
-      compareResult["objectConfig"].conflict.length > 0 ||
-      compareResult["mapConfig"].conflict.length > 0
-    ) {
-      // handleConflict();
-      // TODO handle conflict, for now keep cloud
-      let itemList = Object.keys(compareResult);
-      for (let itemName of itemList) {
-        if (
-          compareResult[itemName].conflict &&
-          compareResult[itemName].conflict.length > 0
-        ) {
-          compareResult[itemName].update = [
-            ...compareResult[itemName].update,
-            ...compareResult[itemName].conflict,
-          ];
-          compareResult[itemName].conflict = [];
-        }
-      }
-    }
-    ConfigService.setAllSyncRecord(syncRecords);
+    let compareResult = await this.getCompareResult();
+
     toast.loading(this.props.t("Start Transfering Data"), {
       id: "syncing-id",
     });
@@ -282,7 +290,9 @@ class Header extends React.Component<HeaderProps, HeaderState> {
       await this.handleSuccess();
     } catch (error) {
       console.log(error);
-      toast.error(this.props.t("Sync failed"));
+      toast.error(this.props.t("Sync failed"), {
+        id: "syncing-id",
+      });
       return;
     } finally {
       await this.handleFinish();
@@ -298,6 +308,14 @@ class Header extends React.Component<HeaderProps, HeaderState> {
         " (" +
         this.props.t("Local") +
         ")"
+    );
+    toast.success(
+      this.props.t(
+        "Your data has been exported to your local folder, learn how to sync your data to your other devices by visiting our documentation, Upgrade to pro to get more advanced features"
+      ),
+      {
+        duration: 4000,
+      }
     );
   };
 
@@ -432,7 +450,15 @@ class Header extends React.Component<HeaderProps, HeaderState> {
           <div
             className="header-report-container"
             onClick={() => {
-              this.props.history.push("/login");
+              if (isElectron) {
+                this.props.history.push("/login");
+              } else {
+                if (navigator.language.startsWith("zh")) {
+                  openExternalUrl("https://www.koodoreader.com/zh/about-pro");
+                } else {
+                  openExternalUrl("https://www.koodoreader.com/en/about-pro");
+                }
+              }
             }}
           >
             <Trans>Pro version</Trans>

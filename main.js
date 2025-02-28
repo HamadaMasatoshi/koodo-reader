@@ -1,7 +1,7 @@
 const {
   app,
   BrowserWindow,
-  BrowserView,
+  WebContentsView,
   Menu,
   ipcMain,
   dialog,
@@ -17,10 +17,12 @@ const store = new Store();
 const fs = require("fs");
 const configDir = app.getPath("userData");
 const dirPath = path.join(configDir, "uploads");
+const packageJson = require("./package.json");
 let mainWin;
 let readerWindow;
 let urlWindow;
 let mainView;
+let chatView;
 let dbConnection = {};
 let syncUtilCache = {};
 const singleInstance = app.requestSingleInstanceLock();
@@ -78,8 +80,8 @@ const getDBConnection = (dbName, storagePath, sqlStatement) => {
   }
   return dbConnection[dbName];
 }
-const getSyncUtil = async (config) => {
-  if (!syncUtilCache[config.service]) {
+const getSyncUtil = async (config, isUseCache = true) => {
+  if (!isUseCache || !syncUtilCache[config.service]) {
     const { SyncUtil, TokenService, ThirdpartyRequest } = await import('./src/assets/lib/kookit-extra.min.mjs');
     let thirdpartyRequest = new ThirdpartyRequest(TokenService);
 
@@ -98,6 +100,7 @@ const createMainWin = () => {
   if (!isDev) {
     Menu.setApplicationMenu(null);
   }
+
   const urlLocation = isDev
     ? "http://localhost:3000"
     : `file://${path.join(__dirname, "./build/index.html")}`;
@@ -108,19 +111,26 @@ const createMainWin = () => {
   });
   mainWin.on("resize", () => {
     if (mainView) {
-      let [width, height] = mainWin.getSize()
+      let { width, height } = mainWin.getContentBounds()
       mainView.setBounds({ x: 0, y: 0, width: width, height: height })
+    }
+    if (chatView) {
+      let { width, height } = mainWin.getContentBounds()
+      chatView.webContents.executeJavaScript(`
+          window.$chatwoot.toggle('close');
+        `)
+      chatView.setBounds({ x: width - 80, y: height - 100, width: 80, height: 80 })
     }
   });
   mainWin.on("maximize", () => {
     if (mainView) {
-      let [width, height] = mainWin.getSize()
+      let { width, height } = mainWin.getContentBounds()
       mainView.setBounds({ x: 0, y: 0, width: width, height: height })
     }
   });
   mainWin.on("unmaximize", () => {
     if (mainView) {
-      let [width, height] = mainWin.getSize()
+      let { width, height } = mainWin.getContentBounds()
       mainView.setBounds({ x: 0, y: 0, width: width, height: height })
     }
   });
@@ -192,7 +202,7 @@ const createMainWin = () => {
 
   });
   ipcMain.handle("cloud-upload", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
+    let syncUtil = await getSyncUtil(config, config.isUseCache);
     let result = await syncUtil.uploadFile(config.fileName, config.fileName, config.type);
     return result;
   });
@@ -204,7 +214,7 @@ const createMainWin = () => {
   });
 
   ipcMain.handle("cloud-delete", async (event, config) => {
-    let syncUtil = await getSyncUtil(config);
+    let syncUtil = await getSyncUtil(config, config.isUseCache);
     let result = await syncUtil.deleteFile(config.fileName, config.type);
     return result;
   });
@@ -381,16 +391,91 @@ const createMainWin = () => {
       createMainWin();
     }
   });
+  ipcMain.handle("new-chat", (event, config) => {
+    if (mainWin && !chatView) {
+      chatView = new WebContentsView({ ...options, transparent: true })
+      mainWin.contentView.addChildView(chatView)
+      let { width, height } = mainWin.getContentBounds()
+      // mainView.setBounds({ x: width - 400, y: height - 540, width: 400, height: 500 })
+      chatView.setBounds({ x: width - 80, y: height - 100, width: 80, height: 80 })
+      chatView.setBackgroundColor("#00000000");
+      chatView.webContents.loadURL(config.url)
+      chatView.webContents.insertCSS(`html, body { overflow: hidden; background: transparent} #cw-widget-holder { width: calc(100% - 20px) !important; height: calc(100% - 20px) !important; margin: 0 !important; border-radius: 10px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.2); overflow: hidden !important; right: 10px !important; top: 10px !important; }`);
+      chatView.webContents.once('did-navigate', () => {
+
+        // THIS WORKS!!! So did-navigate is working!
+        console.log("Main view logs this no problem....");
+        chatView.webContents.once('dom-ready', () => {
+
+          // NOT WORKING!!! Why?
+          chatView.webContents.executeJavaScript(`
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.text = \`
+              (function (d, t) {
+                var BASE_URL = "https://app.chatwoot.com";
+                var g = d.createElement(t),
+                  s = d.getElementsByTagName(t)[0];
+                g.src = BASE_URL + "/packs/js/sdk.js";
+                g.defer = true;
+                g.async = true;
+                s.parentNode.insertBefore(g, s);
+                g.onload = function () {
+                  window.chatwootSDK.run({
+                    websiteToken: "svaD5wxfU5UY1r5ZzpMtLqv2",
+                    baseUrl: BASE_URL,
+                  });
+                  window.addEventListener('chatwoot:ready', function () {
+                    window.$chatwoot.setLocale('${config.locale}');
+                    window.$chatwoot.setCustomAttributes({
+                      version: '${packageJson.version}',
+                      client: 'desktop',
+                    });
+                  });
+                };
+
+              })(document, "script");
+            \`;
+            document.head.appendChild(script);
+          `)
+          event.returnvalue = true;
+
+        })
+      });
+      chatView.webContents.on('focus', () => {
+        let { width, height } = mainWin.getContentBounds()
+        console.log(width, height, 'focus')
+        chatView.setBounds({ x: width - 400, y: height - 520, width: 400, height: 500 })
+        chatView.webContents.executeJavaScript(`
+          window.$chatwoot.toggle('open');
+        `)
+      });
+      chatView.webContents.on('blur', () => {
+        let { width, height } = mainWin.getContentBounds()
+        chatView.setBounds({ x: width - 80, y: height - 100, width: 80, height: 80 })
+        chatView.webContents.executeJavaScript(`
+          window.$chatwoot.toggle('close');
+        `)
+
+      });
+    }
+  });
+  ipcMain.handle("exit-chat", (event, config) => {
+    if (mainWin && chatView) {
+      mainWin.contentView.removeChildView(chatView)
+    }
+  });
+
+
   ipcMain.handle("new-tab", (event, config) => {
     if (mainWin) {
-      mainView = new BrowserView(options)
-      mainWin.setBrowserView(mainView)
-      let [width, height] = mainWin.getSize()
+      mainView = new WebContentsView(options)
+      mainWin.contentView.addChildView(mainView)
+      let { width, height } = mainWin.getContentBounds()
       mainView.setBounds({ x: 0, y: 0, width: width, height: height })
       mainView.webContents.loadURL(config.url)
     }
   });
-
   ipcMain.handle("reload-tab", (event, config) => {
     if (mainWin && mainView) {
       mainView.webContents.reload()
@@ -398,13 +483,13 @@ const createMainWin = () => {
   });
   ipcMain.handle("adjust-tab-size", (event, config) => {
     if (mainWin && mainView) {
-      let [width, height] = mainWin.getSize()
+      let { width, height } = mainWin.getContentBounds()
       mainView.setBounds({ x: 0, y: 0, width: width, height: height })
     }
   });
   ipcMain.handle("exit-tab", (event, message) => {
     if (mainWin && mainView) {
-      mainWin.setBrowserView(null)
+      mainWin.contentView.removeChildView(mainView)
     }
   });
   ipcMain.handle("enter-tab-fullscreen", () => {
@@ -433,7 +518,7 @@ const createMainWin = () => {
   });
   ipcMain.handle("open-url", (event, config) => {
     if (!urlWindow || urlWindow.isDestroyed()) {
-      urlWindow = new BrowserWindow(options);
+      urlWindow = new BrowserWindow();
     }
     urlWindow.loadURL(config.url);
   });
